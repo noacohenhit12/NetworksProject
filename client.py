@@ -36,8 +36,11 @@ class ChatClient:
     def connect(self) -> bool:
         """Establish connection to the server."""
         try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.connect((self.HOST, self.PORT))
+            # Use create_connection with a short timeout to fail fast on network issues
+            sock = socket.create_connection((self.HOST, self.PORT), timeout=5)
+            # switch to blocking mode for normal operation
+            sock.settimeout(None)
+            self.socket = sock
             
             # Receive welcome message and respond with username
             welcome_msg = self.socket.recv(self.BUFFER_SIZE).decode('utf-8')
@@ -53,8 +56,15 @@ class ChatClient:
                 except Exception:
                     self.username = "anonymous"
 
-            # send username to server
-            self.socket.send(self.username.encode('utf-8'))
+            # send username to server (use sendall)
+            try:
+                self.socket.sendall(self.username.encode('utf-8'))
+            except Exception as e:
+                if self.on_status:
+                    self.on_status(f"Failed sending username: {e}")
+                else:
+                    print(f"[ERROR] Failed sending username: {e}")
+                return False
             self.is_connected = True
             status_msg = f"Connected as {self.username}"
             if self.on_status:
@@ -63,6 +73,12 @@ class ChatClient:
                 print(f"[CONNECTED] Successfully connected as '{self.username}'")
             return True
             
+        except socket.timeout:
+            if self.on_status:
+                self.on_status("Connection timed out")
+            else:
+                print("[ERROR] Connection timed out")
+            return False
         except ConnectionRefusedError:
             if self.on_status:
                 self.on_status("Connection refused")
@@ -120,8 +136,8 @@ class ChatClient:
                 else:
                     print("[ERROR] Not connected to server.")
                 return False
-            
-            self.socket.send(message.encode('utf-8'))
+            # use sendall to ensure full payload is delivered
+            self.socket.sendall(message.encode('utf-8'))
             return True
         except Exception as e:
             print(f"[ERROR] Failed to send message: {e}")
