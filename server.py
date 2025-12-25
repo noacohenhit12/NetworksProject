@@ -2,9 +2,23 @@ import socket
 import threading
 from typing import Dict, Optional
 
+
 HOST = "0.0.0.0"   # Listen on all network interfaces
 PORT = 10000
 BUFFER_SIZE = 1024
+
+
+def get_local_ip():
+    """Get the local machine's IP address on the network."""
+    try:
+        # Connect to an external host (doesn't actually send data)
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "127.0.0.1"
 
 
 class ChatServer:
@@ -30,8 +44,12 @@ class ChatServer:
             self.server_socket.bind((self.host, self.port))
             self.server_socket.listen(5)
 
+            local_ip = get_local_ip()
+            print(f"\n{'='*60}")
             print(f"[SERVER] Listening on {self.host}:{self.port}")
-            print("[SERVER] Waiting for clients...")
+            print(f"[SERVER] Server IP for clients: {local_ip}:{self.port}")
+            print(f"[SERVER] Waiting for clients...")
+            print(f"{'='*60}\n")
 
             while self.running:
                 client_socket, client_address = self.server_socket.accept()

@@ -58,8 +58,15 @@ class ChatGUI:
         )
         self.status_label.pack(side="right")
 
-        # Chat area
-        chat_frame = ttk.Frame(self.root, padding=(10, 5))
+        # Main container (chat + input)
+        main_frame = ttk.Frame(self.root)
+        main_frame.pack(fill="both", expand=True, padx=10, pady=(5, 10))
+
+        # Chat area with larger height
+        chat_label = ttk.Label(main_frame, text="Messages:", font=("Segoe UI", 9, "bold"))
+        chat_label.pack(anchor="w", pady=(0, 4))
+
+        chat_frame = ttk.Frame(main_frame)
         chat_frame.pack(fill="both", expand=True)
 
         self.chat_box = tk.Text(
@@ -67,7 +74,8 @@ class ChatGUI:
             state="disabled",
             wrap="word",
             font=("Segoe UI", 10),
-            bg="#f8f8f8"
+            bg="#f8f8f8",
+            height=15
         )
         self.chat_box.pack(side="left", fill="both", expand=True)
 
@@ -75,32 +83,41 @@ class ChatGUI:
         scrollbar.pack(side="right", fill="y")
         self.chat_box.config(yscrollcommand=scrollbar.set)
 
-        # Input
-        input_frame = ttk.Frame(self.root, padding=10)
+        # Input area - more prominent
+        input_label = ttk.Label(main_frame, text="Your message:", font=("Segoe UI", 9, "bold"))
+        input_label.pack(anchor="w", pady=(10, 4))
+
+        input_frame = ttk.Frame(main_frame)
         input_frame.pack(fill="x")
 
         self.message_entry = ttk.Entry(
             input_frame,
-            font=("Segoe UI", 10)
+            font=("Segoe UI", 11)
         )
         self.message_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.message_entry.bind("<Return>", self._send_message_event)
 
-        self.send_button = ttk.Button(
+        self.send_button = tk.Button(
             input_frame,
-            text="Send",
-            style="Send.TButton",
+            text="➤ Send",
+            font=("Segoe UI", 11, "bold"),
+            bg="#4CAF50",
+            fg="white",
+            activebackground="#45a049",
             command=self.send_message,
-            state="disabled"
+            state="disabled",
+            width=10,
+            padx=10,
+            pady=6
         )
         self.send_button.pack(side="right")
 
-        # Debug log panel
+        # Debug log panel (smaller, at bottom)
         log_frame = ttk.LabelFrame(self.root, text="Debug Log", padding=6)
         log_frame.pack(fill="x", padx=10, pady=(0, 10))
         self.debug_log = tk.Text(
             log_frame,
-            height=4,
+            height=3,
             state="disabled",
             wrap="word",
             font=("Courier", 8),
