@@ -1,151 +1,119 @@
-import threading
 import socket
-import sys
+import threading
 from typing import Optional, Callable
 
-class ChatClient:
-    """A chat client with optional callback hooks for GUIs.
 
-    Backwards compatible: if callbacks are not provided this behaves like
-    the original console client (prints to stdout and prompts for username).
+class ChatClient:
+    """
+    TCP Chat Client.
+    Handles network communication only (no UI logic).
     """
 
-    HOST = "localhost"
-    PORT = 10000
     BUFFER_SIZE = 1024
 
     def __init__(
         self,
+        host: str = "localhost",
+        port: int = 10000,
         username: Optional[str] = None,
         on_message: Optional[Callable[[str], None]] = None,
         on_status: Optional[Callable[[str], None]] = None,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
     ):
+        self.host = host
+        self.port = port
         self.username = username
+
+        self.on_message = on_message
+        self.on_status = on_status
+
         self.socket: Optional[socket.socket] = None
         self.is_connected = False
         self.listener_thread: Optional[threading.Thread] = None
-        self.on_message = on_message
-        self.on_status = on_status
-        if host:
-            self.HOST = host
-        if port:
-            self.PORT = port
-        
+
+    # ---------- CONNECTION ----------
+
     def connect(self) -> bool:
-        """Establish connection to the server."""
         try:
-            # Use create_connection with a short timeout to fail fast on network issues
-            sock = socket.create_connection((self.HOST, self.PORT), timeout=5)
-            # switch to blocking mode for normal operation
-            sock.settimeout(None)
-            self.socket = sock
-            
-            # Receive welcome message and respond with username
-            welcome_msg = self.socket.recv(self.BUFFER_SIZE).decode('utf-8')
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.connect((self.host, self.port))
+
+            # Receive welcome message
+            welcome = self.socket.recv(self.BUFFER_SIZE).decode("utf-8")
+
             if self.on_message:
-                self.on_message(f"[SERVER] {welcome_msg}")
-            else:
-                print(f"[SERVER] {welcome_msg}")
+                self.on_message(f"[SERVER] {welcome}")
 
             if not self.username:
-                # CLI fallback
-                try:
-                    self.username = input(">>> Enter your username: ").strip()
-                except Exception:
-                    self.username = "anonymous"
+                raise ValueError("Username must be provided")
 
-            # send username to server (use sendall)
-            try:
-                self.socket.sendall(self.username.encode('utf-8'))
-            except Exception as e:
-                if self.on_status:
-                    self.on_status(f"Failed sending username: {e}")
-                else:
-                    print(f"[ERROR] Failed sending username: {e}")
-                return False
+            # Send username to server
+            self.socket.send(self.username.encode("utf-8"))
             self.is_connected = True
-            status_msg = f"Connected as {self.username}"
+
             if self.on_status:
-                self.on_status(status_msg)
-            else:
-                print(f"[CONNECTED] Successfully connected as '{self.username}'")
+                self.on_status(f"Connected to {self.host}:{self.port} as {self.username}")
+
             return True
-            
-        except socket.timeout:
-            if self.on_status:
-                self.on_status("Connection timed out")
-            else:
-                print("[ERROR] Connection timed out")
-            return False
-        except ConnectionRefusedError:
-            if self.on_status:
-                self.on_status("Connection refused")
-            else:
-                print("[ERROR] Could not connect to server. Is it running?")
-            return False
+
         except Exception as e:
             if self.on_status:
                 self.on_status(f"Connection failed: {e}")
-            else:
-                print(f"[ERROR] Connection failed: {e}")
+            self.is_connected = False
             return False
-    
-    def _listener_thread_func(self):
-        """Listen for incoming messages from the server."""
+
+    # ---------- LISTENER ----------
+
+    def start_listening(self):
+        if self.listener_thread and self.listener_thread.is_alive():
+            return
+
+        self.listener_thread = threading.Thread(
+            target=self._listen_loop,
+            daemon=True
+        )
+        self.listener_thread.start()
+
+    def _listen_loop(self):
         try:
-            while self.is_connected:
-                data = self.socket.recv(self.BUFFER_SIZE).decode('utf-8')
+            while self.is_connected and self.socket:
+                data = self.socket.recv(self.BUFFER_SIZE)
                 if not data:
-                    # server closed
-                    if self.on_status:
-                        self.on_status("Disconnected")
-                    else:
-                        print("\n[DISCONNECTED] Server closed the connection.")
-                    self.is_connected = False
                     break
 
+                message = data.decode("utf-8")
+
                 if self.on_message:
-                    self.on_message(data)
-                else:
-                    print(f"\n[MESSAGE] {data}")
-                    print(">>> ", end="", flush=True)
-                
+                    self.on_message(message)
+
         except OSError:
-            # Normal shutdown - socket closed
-            if self.is_connected:
-                print("\n[LISTENER STOPPED] Connection closed.")
-            self.is_connected = False
+            pass
         except Exception as e:
-            print(f"\n[ERROR] Listener error: {e}")
+            if self.on_status:
+                self.on_status(f"Listener error: {e}")
+
+        finally:
             self.is_connected = False
-    
-    def start_listening(self):
-        """Start the background listener thread."""
-        if self.listener_thread is None or not self.listener_thread.is_alive():
-            self.listener_thread = threading.Thread(target=self._listener_thread_func, daemon=True)
-            self.listener_thread.start()
-    
+            if self.on_status:
+                self.on_status("Disconnected from server")
+
+    # ---------- SEND ----------
+
     def send_message(self, message: str) -> bool:
-        """Send a message to the server."""
+        if not self.is_connected or not self.socket:
+            return False
+
         try:
-            if not self.is_connected or not self.socket:
-                if self.on_status:
-                    self.on_status("Not connected")
-                else:
-                    print("[ERROR] Not connected to server.")
-                return False
-            # use sendall to ensure full payload is delivered
-            self.socket.sendall(message.encode('utf-8'))
+            self.socket.send(message.encode("utf-8"))
             return True
         except Exception as e:
-            print(f"[ERROR] Failed to send message: {e}")
+            if self.on_status:
+                self.on_status(f"Send failed: {e}")
             self.is_connected = False
             return False
-    
+
+    # ---------- DISCONNECT ----------
+
     def disconnect(self):
-        """Gracefully disconnect from the server."""
         self.is_connected = False
         if self.socket:
             try:
@@ -153,52 +121,36 @@ class ChatClient:
             except:
                 pass
         if self.on_status:
-            self.on_status("Disconnected")
-        else:
-            print("[DISCONNECTED] Client shut down.")
-    
-    def run_interactive(self):
-        """Run the client in interactive mode."""
-        if not self.connect():
-            return
-        
-        self.start_listening()
-        print("\nEnter messages in format: USERNAME:MESSAGE")
-        print("Type 'exit' to quit.\n")
-        
-        try:
-            while self.is_connected:
-                user_input = input(">>> ").strip()
-                
-                if not user_input:
-                    continue
-                
-                if user_input.lower() == "exit":
-                    break
-                
-                # Validate format (optional, but helpful)
-                if ":" not in user_input:
-                    user_input = f"{self.username}:{user_input}"
-                
-                self.send_message(user_input)
-        
-        except KeyboardInterrupt:
-            print("\n[INTERRUPTED] Shutting down...")
-        except Exception as e:
-            print(f"\n[ERROR] Unexpected error: {e}")
-        finally:
-            self.disconnect()
+            self.on_status("Client disconnected")
 
 
-def main():
-    """Main entry point."""
-    print("=" * 50)
-    print("  NETWORK CHAT CLIENT")
-    print("=" * 50)
-    
-    client = ChatClient()
-    client.run_interactive()
-
+# ---------- OPTIONAL: CLI TEST MODE ----------
+# Not used by GUI, but useful for debugging.
 
 if __name__ == "__main__":
-    main()
+    def print_message(msg):
+        print(msg)
+
+    def print_status(status):
+        print(f"[STATUS] {status}")
+
+    client = ChatClient(
+        host="localhost",
+        port=10000,
+        username="test_user",
+        on_message=print_message,
+        on_status=print_status,
+    )
+
+    if client.connect():
+        client.start_listening()
+        try:
+            while True:
+                msg = input("> ")
+                if msg.lower() == "exit":
+                    break
+                client.send_message(msg)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            client.disconnect()
