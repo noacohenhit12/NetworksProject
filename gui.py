@@ -14,6 +14,7 @@ class ChatGUI:
         self.root.minsize(650, 450)
 
         self.client: ChatClient | None = None
+        self.username: str | None = None
 
         self._setup_style()
         self._build_ui()
@@ -181,6 +182,7 @@ class ChatGUI:
     # ---------- CLIENT ----------
 
     def _connect_client(self, username: str, host: str, port: int):
+        self.username = username
         self.client = ChatClient(
             host=host,
             port=port,
@@ -203,9 +205,23 @@ class ChatGUI:
 
     def _on_message(self, message: str):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        
+        # Parse message format "username: message" or system messages "[SYSTEM] ..."
+        formatted_message = message
+        if not message.startswith("["):
+            # Regular message from another user
+            if ": " in message:
+                sender, msg_content = message.split(": ", 1)
+                formatted_message = f"[{timestamp}] {sender}: {msg_content}"
+            else:
+                formatted_message = f"[{timestamp}] {message}"
+        else:
+            # System message
+            formatted_message = f"[{timestamp}] {message}"
+        
         self.root.after(
             0,
-            lambda: self._append_message(f"[{timestamp}] {message}")
+            lambda: self._append_message(formatted_message)
         )
         self.root.after(0, lambda: self._append_debug(f"MSG: {message}"))
 
@@ -251,6 +267,11 @@ class ChatGUI:
         if not message:
             return
 
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        self.root.after(
+            0,
+            lambda: self._append_message(f"[{timestamp}] {self.username} (You): {message}")
+        )
         self.client.send_message(message)
         self.message_entry.delete(0, "end")
 
