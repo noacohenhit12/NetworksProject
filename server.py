@@ -27,9 +27,10 @@ class ChatServer:
     Handles connections, message broadcasting, and graceful shutdown.
     """
 
-    def __init__(self, host: str = HOST, port: int = PORT):
+    def __init__(self, host: str = HOST, port: int = PORT, backlog: int = 5): 
         self.host = host
         self.port = port
+        self.backlog = backlog  # Number of pending connections to queue
         self.server_socket: Optional[socket.socket] = None
         self.clients: Dict[socket.socket, str] = {}  # socket -> username
         self.lock = threading.Lock()
@@ -42,7 +43,7 @@ class ChatServer:
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.server_socket.bind((self.host, self.port))
-            self.server_socket.listen(5)
+            self.server_socket.listen(self.backlog)
 
             local_ip = get_local_ip()
             print(f"\n{'='*60}")
