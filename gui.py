@@ -135,12 +135,21 @@ class ChatGUI:
     def _show_connect_popup(self):
         popup = tk.Toplevel(self.root)
         popup.title("Connect to Server")
-        popup.geometry("320x240")
+        popup.geometry("380x260")
         popup.resizable(False, False)
         popup.grab_set()
 
         frame = ttk.Frame(popup, padding=10)
         frame.pack(fill="both", expand=True)
+
+        # Info label
+        info_label = ttk.Label(
+            frame, 
+            text="(Ask server admin for the IP shown when server starts)",
+            font=("Segoe UI", 8),
+            foreground="gray"
+        )
+        info_label.pack(anchor="w", pady=(0, 10))
 
         ttk.Label(frame, text="Username:").pack(anchor="w")
         username_entry = ttk.Entry(frame)
@@ -148,7 +157,6 @@ class ChatGUI:
 
         ttk.Label(frame, text="Server IP:").pack(anchor="w", pady=(8, 0))
         ip_entry = ttk.Entry(frame)
-        ip_entry.insert(0, "192.168.1.212")  # Change to actual server IP
         ip_entry.pack(fill="x")
 
         ttk.Label(frame, text="Port:").pack(anchor="w", pady=(8, 0))
