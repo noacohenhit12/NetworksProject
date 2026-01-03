@@ -135,7 +135,7 @@ class ChatGUI:
     def _show_connect_popup(self):
         popup = tk.Toplevel(self.root)
         popup.title("Connect to Server")
-        popup.geometry("400x300")
+        popup.geometry("450x360")
         popup.resizable(False, False)
         popup.grab_set()
 
@@ -144,20 +144,17 @@ class ChatGUI:
 
         ttk.Label(frame, text="Username:").pack(anchor="w")
         username_entry = ttk.Entry(frame)
-        username_entry.pack(fill="x")
+        username_entry.pack(fill="x", pady=(0, 12))
 
-        # Server selection frame
-        ttk.Label(frame, text="Select or Enter Server IP:", font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(12, 4))
+        # Local Network Discovery Section
+        local_frame = ttk.LabelFrame(frame, text="Local Network (Auto-Discover)", padding=8)
+        local_frame.pack(fill="x", pady=(0, 12))
         
-        server_frame = ttk.Frame(frame)
-        server_frame.pack(fill="x", pady=(0, 8))
-        
-        # Server dropdown
         server_var = tk.StringVar()
-        server_combo = ttk.Combobox(server_frame, textvariable=server_var, state="readonly", width=25)
+        server_combo = ttk.Combobox(local_frame, textvariable=server_var, state="readonly", width=30)
         server_combo.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        server_combo.insert(0, "Searching...")
         
-        # Refresh button
         def refresh_servers():
             refresh_btn.config(state="disabled", text="Searching...")
             popup.update()
@@ -168,47 +165,79 @@ class ChatGUI:
                 server_combo.config(values=server_list)
                 if server_list:
                     server_combo.current(0)
+            else:
+                server_combo.config(values=["No servers found"])
+                server_combo.current(0)
             
             refresh_btn.config(state="normal", text="🔄 Refresh")
         
-        refresh_btn = ttk.Button(server_frame, text="🔄 Refresh", command=refresh_servers, width=12)
+        refresh_btn = ttk.Button(local_frame, text="🔄 Refresh", command=refresh_servers, width=12)
         refresh_btn.pack(side="right")
         
         # Auto-refresh on startup
         threading.Thread(target=refresh_servers, daemon=True).start()
 
-        ttk.Label(frame, text="Port:", font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
-        port_entry = ttk.Entry(frame)
+        # Manual Entry Section
+        manual_frame = ttk.LabelFrame(frame, text="Other Networks (Manual Entry)", padding=8)
+        manual_frame.pack(fill="x", pady=(0, 12))
+        
+        ttk.Label(manual_frame, text="Server IP/Hostname:").pack(anchor="w")
+        ip_entry = ttk.Entry(manual_frame, width=35)
+        ip_entry.pack(fill="x", pady=(4, 8))
+        
+        ttk.Label(manual_frame, text="Port:").pack(anchor="w")
+        port_entry = ttk.Entry(manual_frame, width=35)
         port_entry.insert(0, "10000")
         port_entry.pack(fill="x")
+        
+        # Help text
+        help_text = ttk.Label(
+            frame,
+            text="For different networks: Use public IP + port forwarding, or share IP with server admin",
+            font=("Segoe UI", 8),
+            foreground="gray"
+        )
+        help_text.pack(anchor="w", pady=(8, 12))
 
         def connect():
             username = username_entry.get().strip()
-            server_str = server_var.get().strip()
             
             if not username:
                 messagebox.showerror("Error", "Username is required")
                 return
             
-            if not server_str:
-                messagebox.showerror("Error", "Please select or enter a server IP")
-                return
-
-            try:
-                if ":" in server_str:
-                    host, port_str = server_str.rsplit(":", 1)
-                    port_int = int(port_str)
-                else:
-                    host = server_str
+            # Try local network selection first
+            server_str = server_var.get().strip()
+            manual_ip = ip_entry.get().strip()
+            
+            if server_str and "No servers found" not in server_str:
+                # Use auto-discovered server
+                try:
+                    if ":" in server_str:
+                        host, port_str = server_str.rsplit(":", 1)
+                        port_int = int(port_str)
+                    else:
+                        host = server_str
+                        port_int = int(port_entry.get().strip())
+                except ValueError:
+                    messagebox.showerror("Error", "Port must be a number")
+                    return
+            elif manual_ip:
+                # Use manual entry
+                host = manual_ip
+                try:
                     port_int = int(port_entry.get().strip())
-            except ValueError:
-                messagebox.showerror("Error", "Port must be a number")
+                except ValueError:
+                    messagebox.showerror("Error", "Port must be a number")
+                    return
+            else:
+                messagebox.showerror("Error", "Please select a server or enter IP manually")
                 return
 
             popup.destroy()
             self._connect_client(username, host, port_int)
 
-        ttk.Button(frame, text="Connect", command=connect).pack(pady=12)
+        ttk.Button(frame, text="Connect", command=connect).pack(pady=8)
         popup.bind("<Return>", lambda _: connect())
 
         username_entry.focus()
