@@ -1,11 +1,13 @@
 import socket
 import threading
+import time
 from typing import Dict, Optional
 
 
 HOST = "0.0.0.0"   # Listen on all network interfaces
 PORT = 10000
 BUFFER_SIZE = 1024
+BROADCAST_PORT = 9999  # UDP port for server discovery
 
 
 def get_local_ip():
@@ -35,6 +37,7 @@ class ChatServer:
         self.clients: Dict[socket.socket, str] = {}  # socket -> username
         self.lock = threading.Lock()
         self.running = True
+        self.broadcast_thread: Optional[threading.Thread] = None
 
     # ---------- START ----------
 
@@ -51,6 +54,14 @@ class ChatServer:
             print(f"[SERVER] Server IP for clients: {local_ip}:{self.port}")
             print(f"[SERVER] Waiting for clients...")
             print(f"{'='*60}\n")
+
+            # Start broadcasting server presence
+            self.broadcast_thread = threading.Thread(
+                target=self._broadcast_presence,
+                args=(local_ip,),
+                daemon=True
+            )
+            self.broadcast_thread.start()
 
             while self.running:
                 client_socket, client_address = self.server_socket.accept()
@@ -71,6 +82,29 @@ class ChatServer:
 
         finally:
             self.shutdown()
+
+    # ---------- CLIENT HANDLING ----------
+
+    def _broadcast_presence(self, local_ip: str):
+        """Broadcast server presence on local network using UDP."""
+        try:
+            broadcast_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            broadcast_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            broadcast_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            
+            message = f"CHAT_SERVER|{local_ip}|{self.port}".encode("utf-8")
+            
+            while self.running:
+                try:
+                    # Broadcast to all devices on the network
+                    broadcast_socket.sendto(message, ("<broadcast>", BROADCAST_PORT))
+                except:
+                    pass
+                time.sleep(2)  # Broadcast every 2 seconds
+                
+            broadcast_socket.close()
+        except Exception as e:
+            print(f"[BROADCAST ERROR] {e}")
 
     # ---------- CLIENT HANDLING ----------
 

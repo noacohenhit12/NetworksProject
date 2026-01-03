@@ -1,6 +1,7 @@
 import socket
 import threading
-from typing import Optional, Callable
+import time
+from typing import Optional, Callable, Dict, List
 
 
 class ChatClient:
@@ -10,6 +11,7 @@ class ChatClient:
     """
 
     BUFFER_SIZE = 1024
+    BROADCAST_PORT = 9999  # UDP port for server discovery
 
     def __init__(
         self,
@@ -29,6 +31,44 @@ class ChatClient:
         self.socket: Optional[socket.socket] = None
         self.is_connected = False
         self.listener_thread: Optional[threading.Thread] = None
+
+    # ---------- SERVER DISCOVERY ----------
+
+    @staticmethod
+    def discover_servers(timeout: float = 3.0) -> Dict[str, int]:
+        """
+        Discover available chat servers on the local network.
+        Returns dict of {ip: port} for available servers.
+        """
+        servers: Dict[str, int] = {}
+        try:
+            discover_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            discover_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            discover_socket.bind(("", ChatClient.BROADCAST_PORT))
+            discover_socket.settimeout(timeout)
+            
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                try:
+                    data, addr = discover_socket.recvfrom(1024)
+                    message = data.decode("utf-8")
+                    
+                    if message.startswith("CHAT_SERVER|"):
+                        parts = message.split("|")
+                        if len(parts) == 3:
+                            server_ip = parts[1]
+                            server_port = int(parts[2])
+                            servers[server_ip] = server_port
+                except socket.timeout:
+                    break
+                except:
+                    continue
+                    
+            discover_socket.close()
+        except Exception as e:
+            print(f"[DISCOVERY ERROR] {e}")
+        
+        return servers
 
     # ---------- CONNECTION ----------
 

@@ -135,46 +135,72 @@ class ChatGUI:
     def _show_connect_popup(self):
         popup = tk.Toplevel(self.root)
         popup.title("Connect to Server")
-        popup.geometry("380x260")
+        popup.geometry("400x300")
         popup.resizable(False, False)
         popup.grab_set()
 
         frame = ttk.Frame(popup, padding=10)
         frame.pack(fill="both", expand=True)
 
-        # Info label
-        info_label = ttk.Label(
-            frame, 
-            text="(Ask server admin for the IP shown when server starts)",
-            font=("Segoe UI", 8),
-            foreground="gray"
-        )
-        info_label.pack(anchor="w", pady=(0, 10))
-
         ttk.Label(frame, text="Username:").pack(anchor="w")
         username_entry = ttk.Entry(frame)
         username_entry.pack(fill="x")
 
-        ttk.Label(frame, text="Server IP:").pack(anchor="w", pady=(8, 0))
-        ip_entry = ttk.Entry(frame)
-        ip_entry.pack(fill="x")
+        # Server selection frame
+        ttk.Label(frame, text="Select or Enter Server IP:", font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(12, 4))
+        
+        server_frame = ttk.Frame(frame)
+        server_frame.pack(fill="x", pady=(0, 8))
+        
+        # Server dropdown
+        server_var = tk.StringVar()
+        server_combo = ttk.Combobox(server_frame, textvariable=server_var, state="readonly", width=25)
+        server_combo.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        
+        # Refresh button
+        def refresh_servers():
+            refresh_btn.config(state="disabled", text="Searching...")
+            popup.update()
+            
+            servers = ChatClient.discover_servers(timeout=2.0)
+            if servers:
+                server_list = [f"{ip}:{port}" for ip, port in servers.items()]
+                server_combo.config(values=server_list)
+                if server_list:
+                    server_combo.current(0)
+            
+            refresh_btn.config(state="normal", text="🔄 Refresh")
+        
+        refresh_btn = ttk.Button(server_frame, text="🔄 Refresh", command=refresh_servers, width=12)
+        refresh_btn.pack(side="right")
+        
+        # Auto-refresh on startup
+        threading.Thread(target=refresh_servers, daemon=True).start()
 
-        ttk.Label(frame, text="Port:").pack(anchor="w", pady=(8, 0))
+        ttk.Label(frame, text="Port:", font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
         port_entry = ttk.Entry(frame)
         port_entry.insert(0, "10000")
         port_entry.pack(fill="x")
 
         def connect():
             username = username_entry.get().strip()
-            host = ip_entry.get().strip()
-            port = port_entry.get().strip()
-
-            if not username or not host or not port:
-                messagebox.showerror("Error", "All fields are required")
+            server_str = server_var.get().strip()
+            
+            if not username:
+                messagebox.showerror("Error", "Username is required")
+                return
+            
+            if not server_str:
+                messagebox.showerror("Error", "Please select or enter a server IP")
                 return
 
             try:
-                port_int = int(port)
+                if ":" in server_str:
+                    host, port_str = server_str.rsplit(":", 1)
+                    port_int = int(port_str)
+                else:
+                    host = server_str
+                    port_int = int(port_entry.get().strip())
             except ValueError:
                 messagebox.showerror("Error", "Port must be a number")
                 return
